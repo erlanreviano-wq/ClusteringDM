@@ -1,124 +1,68 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.cluster import DBSCAN
-
 st.set_page_config(
-    page_title="Clustering Penjualan Tiket Pesawat",
+    page_title="Clustering Penjualan Tiket Pesawat (DBSCAN)",
     layout="wide"
 )
 
 st.title("✈️ Clustering Penjualan Tiket Pesawat (DBSCAN)")
+st.info("Aplikasi ini menampilkan hasil clustering DBSCAN yang telah diproses sebelumnya.")
 
-st.subheader("📂 Dataset")
+st.subheader("📂 Dataset Hasil Clustering")
 
-uploaded_file = st.file_uploader("Upload dataset CSV", type=["csv"])
-
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.info("Menggunakan dataset upload")
-else:
-    df = pd.read_csv("penjualan_tiket_pesawat.csv")
-    st.info("Menggunakan dataset default")
-
+df = pd.read_csv("hasil_clustering_dbscan.csv")
 st.dataframe(df.head())
-
-df_clust = df.copy()
-df_clust["Date"] = pd.to_datetime(df_clust["Date"])
-
-# Hapus missing value & duplikasi
-df_clust = df_clust.dropna()
-df_clust = df_clust.drop_duplicates()
-
-encoder_cols = ["City", "Gender", "Airline", "Payment_Method"]
-for col in encoder_cols:
-    le = LabelEncoder()
-    df_clust[col] = le.fit_transform(df_clust[col])
-
-# Feature rasio
-df_clust["Total_per_Ticket"] = (
-    df_clust["Total"] / df_clust["Ticket_Quantity"]
-)
-
-# Feature waktu
-df_clust["Month"] = df_clust["Date"].dt.month
-df_clust["DayOfWeek"] = df_clust["Date"].dt.dayofweek
-
-X = df_clust[
-    ["Ticket_Quantity", "Ticket_Price", "Total", "Total_per_Ticket"]
-]
-
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-
-st.subheader("🔵 Clustering DBSCAN")
-
-eps = st.slider("Nilai eps", 0.1, 1.0, 0.4, 0.05)
-min_samples = st.slider("Min samples", 3, 10, 5)
-
-dbscan = DBSCAN(
-    eps=eps,
-    min_samples=min_samples
-)
-
-df_clust["Cluster"] = dbscan.fit_predict(X_scaled)
 
 st.subheader("📊 Distribusi Cluster")
 
 cluster_dist = (
-    df_clust["Cluster"]
+    df["Cluster"]
     .value_counts()
+    .sort_index()
     .reset_index()
-    .rename(columns={"index": "Cluster", "Cluster": "Count"})
+    .rename(columns={"index": "Cluster", "Cluster": "Jumlah Data"})
 )
 
 st.dataframe(cluster_dist)
 
 st.subheader("📋 Rata-rata Setiap Cluster")
 
-cluster_summary = (
-    df_clust
+cluster_mean = (
+    df
     .groupby("Cluster")[["Ticket_Quantity", "Ticket_Price", "Total"]]
     .mean()
     .reset_index()
 )
 
-st.dataframe(cluster_summary)
+st.dataframe(cluster_mean)
 
-st.subheader("📈 Visualisasi Hasil Clustering")
+st.subheader("📈 Visualisasi Scatter Plot")
 
-fig, ax = plt.subplots(figsize=(8, 6))
+plt.figure(figsize=(8, 6))
 
-for c in sorted(df_clust["Cluster"].unique()):
-    subset = df_clust[df_clust["Cluster"] == c]
-    ax.scatter(
+for cluster in sorted(df["Cluster"].unique()):
+    subset = df[df["Cluster"] == cluster]
+    plt.scatter(
         subset["Ticket_Price"],
         subset["Total"],
-        label=f"Cluster {c}",
+        label=f"Cluster {cluster}",
         alpha=0.6
     )
 
-ax.set_xlabel("Ticket Price")
-ax.set_ylabel("Total Transaction")
-ax.set_title("Scatter Plot Hasil Clustering DBSCAN")
-ax.legend()
-ax.grid(True)
+plt.xlabel("Ticket Price")
+plt.ylabel("Total Transaction")
+plt.title("Scatter Plot Hasil Clustering DBSCAN")
+plt.legend()
+plt.grid(True)
 
-st.pyplot(fig)
+st.pyplot(plt)
 
-st.subheader("💾 Simpan Hasil Clustering")
-
-if st.button("Simpan ke CSV"):
-    df_clust.to_csv("hasil_clustering_dbscan.csv", index=False)
-    st.success("File hasil_clustering_dbscan.csv berhasil disimpan")
-st.info(
-    """
-    **Keterangan:**
-    - Setiap cluster menunjukkan kelompok transaksi dengan pola yang mirip.
-    - Clustering dilakukan menggunakan DBSCAN tanpa menentukan jumlah cluster di awal.
-    - Feature engineering dan preprocessing lanjutan diterapkan sebelum clustering.
-    """
-)
+st.subheader("📝 Keterangan")
+st.markdown("""
+- Clustering dilakukan menggunakan **DBSCAN** pada tahap preprocessing (Google Colab).
+- File `hasil_clustering_dbscan.csv` merupakan **output final clustering**.
+- Aplikasi Streamlit digunakan untuk **visualisasi dan analisis hasil cluster**.
+- Setiap cluster menunjukkan pola transaksi berbeda berdasarkan jumlah tiket, harga, dan total.
+""")
