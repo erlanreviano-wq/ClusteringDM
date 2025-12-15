@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.cluster import KMeans
@@ -33,7 +34,8 @@ for col in df_proc.select_dtypes(include="object").columns:
 
 df_proc = df_proc.dropna().drop_duplicates()
 
-X = df_proc[["Terjual", "Harga", "Pemasukan"]]
+features = ["Terjual", "Harga", "Pemasukan"]
+X = df_proc[features]
 
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
@@ -51,15 +53,14 @@ kmeans = KMeans(
     random_state=42
 )
 
-clusters = kmeans.fit_predict(X_scaled)
-df_proc["Cluster"] = clusters
+df_proc["Cluster"] = kmeans.fit_predict(X_scaled)
 
 st.subheader("📌 Distribusi Cluster")
 st.dataframe(df_proc["Cluster"].value_counts().sort_index())
 
 st.subheader("📊 Rata-rata Setiap Cluster")
 st.dataframe(
-    df_proc.groupby("Cluster")[["Terjual", "Harga", "Pemasukan"]].mean()
+    df_proc.groupby("Cluster")[features].mean()
 )
 
 st.subheader("🎯 Visualisasi Hasil Clustering")
@@ -75,17 +76,38 @@ sns.scatterplot(
 )
 
 ax.set_title("Scatter Plot Clustering K-Means")
-ax.set_xlabel("Harga")
-ax.set_ylabel("Pemasukan")
 ax.grid(True)
-
 st.pyplot(fig)
+
+st.subheader("🧮 Input Data Baru (Prediksi Cluster)")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    input_terjual = st.number_input("Jumlah Terjual", min_value=0, value=10)
+
+with col2:
+    input_harga = st.number_input("Harga", min_value=0, value=5000)
+
+with col3:
+    input_pemasukan = st.number_input("Pemasukan", min_value=0, value=50000)
+
+if st.button("Prediksi Cluster"):
+    input_df = pd.DataFrame(
+        [[input_terjual, input_harga, input_pemasukan]],
+        columns=features
+    )
+
+    input_scaled = scaler.transform(input_df)
+    predicted_cluster = kmeans.predict(input_scaled)[0]
+
+    st.success(f"📌 Data tersebut masuk ke **Cluster {predicted_cluster}**")
 
 st.markdown(
     """
 ### 📝 Keterangan:
-- K-Means mengelompokkan data berdasarkan **jarak ke centroid**.
-- Jumlah cluster ditentukan di awal (`k`).
-- Setiap cluster menunjukkan pola transaksi yang berbeda.
+- Model K-Means dilatih menggunakan data historis.
+- Data baru yang diinput akan dipetakan ke cluster terdekat.
+- Proses ini **tidak melatih ulang model**, hanya melakukan prediksi cluster.
 """
 )
