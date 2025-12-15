@@ -1,75 +1,115 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.cluster import DBSCAN
 
 st.set_page_config(
-    page_title="Clustering Penjualan Tiket Pesawat",
+    page_title="Clustering Transaksi (DBSCAN)",
     layout="wide"
 )
 
-st.title("🔵 Clustering Penjualan Tiket Pesawat (DBSCAN)")
+st.title("🔵 Clustering Transaksi Menggunakan DBSCAN")
+st.write(
+    "Aplikasi ini melakukan **clustering transaksi** menggunakan metode "
+    "**DBSCAN** berdasarkan pola penjualan dan keuangan."
+)
 
-st.markdown("""
-Aplikasi ini menampilkan hasil clustering penjualan tiket pesawat
-menggunakan metode **DBSCAN**.
-""")
-
-st.sidebar.header("📂 Upload Data Hasil Clustering")
+st.sidebar.header("📂 Dataset")
 
 uploaded_file = st.sidebar.file_uploader(
-    "Upload file CSV",
+    "Upload file catatan.csv",
     type=["csv"]
 )
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    st.success("File berhasil di-upload")
+    st.sidebar.success("Menggunakan dataset upload")
 else:
-    df = pd.read_csv("hasil_clustering_dbscan.csv")
-    st.info("Menggunakan file default: hasil_clustering_dbscan.csv")
+    df = pd.read_csv("catatan.csv")
+    st.sidebar.info("Menggunakan dataset default")
 
-st.subheader("📊 Data Hasil Clustering")
+st.subheader("📄 Dataset Awal")
 st.dataframe(df.head())
 
-st.subheader("📈 Distribusi Cluster")
+df_proc = df.copy()
 
-cluster_counts = df['Cluster'].value_counts().sort_index()
-st.bar_chart(cluster_counts)
+# Tanggal → fitur waktu
+df_proc["Tanggal"] = pd.to_datetime(df_proc["Tanggal"])
+df_proc["Year"] = df_proc["Tanggal"].dt.year
+df_proc["Month"] = df_proc["Tanggal"].dt.month
+df_proc["Day"] = df_proc["Tanggal"].dt.day
+df_proc.drop(columns=["Tanggal"], inplace=True)
 
-st.subheader("🔍 Visualisasi Clustering")
+# Encoding kategorikal
+for col in df_proc.select_dtypes(include="object").columns:
+    df_proc[col] = LabelEncoder().fit_transform(df_proc[col])
 
-fig, ax = plt.subplots(figsize=(8, 6))
+# Cleaning
+df_proc = df_proc.dropna().drop_duplicates()
 
-for cluster in sorted(df['Cluster'].unique()):
-    subset = df[df['Cluster'] == cluster]
-    ax.scatter(
-        subset['Ticket_Price'],
-        subset['Total'],
-        label=f"Cluster {cluster}",
-        alpha=0.6
-    )
+features = [
+    "Terjual",
+    "Harga",
+    "Modal Satuan",
+    "Pemasukan",
+    "Pengeluaran"
+]
 
-ax.set_xlabel("Ticket Price")
-ax.set_ylabel("Total Transaction")
-ax.set_title("Scatter Plot Hasil Clustering DBSCAN")
-ax.legend()
-ax.grid(True)
+X = df_proc[features]
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+dbscan = DBSCAN(
+    eps=0.5,
+    min_samples=5
+)
+
+clusters = dbscan.fit_predict(X_scaled)
+df_proc["Cluster"] = clusters
+
+st.subheader("📊 Distribusi Cluster")
+
+cluster_counts = df_proc["Cluster"].value_counts().sort_index()
+st.dataframe(cluster_counts.rename("Jumlah Data"))
+
+fig, ax = plt.subplots()
+cluster_counts.plot(kind="bar", ax=ax)
+ax.set_title("Jumlah Data per Cluster")
+ax.set_xlabel("Cluster")
+ax.set_ylabel("Jumlah Transaksi")
 
 st.pyplot(fig)
 
 st.subheader("📋 Rata-rata Setiap Cluster")
 
-cluster_summary = df.groupby('Cluster')[[
-    'Ticket_Quantity',
-    'Ticket_Price',
-    'Total'
-]].mean()
-
+cluster_summary = df_proc.groupby("Cluster")[features].mean()
 st.dataframe(cluster_summary)
 
-st.info("""
-**Keterangan:**
-- Setiap warna menunjukkan satu cluster.
-- Cluster dibentuk berdasarkan pola transaksi (jumlah tiket, harga, dan total).
-- Metode DBSCAN tidak menggunakan K-Means dan tidak memerlukan jumlah cluster di awal.
-""")
+st.subheader("🔍 Visualisasi Cluster (Scatter Plot)")
+
+fig, ax = plt.subplots()
+sns.scatterplot(
+    data=df_proc,
+    x="Harga",
+    y="Pemasukan",
+    hue="Cluster",
+    palette="tab10",
+    ax=ax
+)
+
+ax.set_title("Clustering berdasarkan Harga dan Pemasukan")
+st.pyplot(fig)
+
+st.markdown(
+    """
+### 📝 Keterangan:
+- Setiap warna menunjukkan **satu cluster**.
+- Clustering dibentuk berdasarkan **pola transaksi dan keuangan**.
+- **DBSCAN tidak memerlukan jumlah cluster di awal** dan tidak menggunakan K-Means.
+"""
+)
