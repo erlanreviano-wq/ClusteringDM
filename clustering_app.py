@@ -12,87 +12,68 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🔵 Clustering Transaksi Menggunakan DBSCAN")
+st.title("📊 Clustering Transaksi Penjualan (DBSCAN)")
 st.write(
-    "Aplikasi ini melakukan **clustering transaksi** menggunakan metode "
-    "**DBSCAN** berdasarkan pola penjualan dan keuangan."
+    "Aplikasi ini mengelompokkan transaksi penjualan menggunakan "
+    "**DBSCAN** berdasarkan pola jumlah, harga, dan nilai transaksi."
 )
 
-st.sidebar.header("📂 Dataset")
-
-uploaded_file = st.sidebar.file_uploader(
-    "Upload file catatan.csv",
-    type=["csv"]
-)
-
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.sidebar.success("Menggunakan dataset upload")
-else:
-    df = pd.read_csv("catatan.csv")
-    st.sidebar.info("Menggunakan dataset default")
+df = pd.read_csv("catatan.csv")
 
 st.subheader("📄 Dataset Awal")
 st.dataframe(df.head())
 
 df_proc = df.copy()
 
-# Tanggal → fitur waktu
-df_proc["Tanggal"] = pd.to_datetime(df_proc["Tanggal"])
-df_proc["Year"] = df_proc["Tanggal"].dt.year
-df_proc["Month"] = df_proc["Tanggal"].dt.month
-df_proc["Day"] = df_proc["Tanggal"].dt.day
-df_proc.drop(columns=["Tanggal"], inplace=True)
+# Parsing tanggal AMAN
+df_proc["Tanggal"] = pd.to_datetime(
+    df_proc["Tanggal"],
+    dayfirst=True,
+    errors="coerce"
+)
 
-# Encoding kategorikal
+# Buang tanggal invalid
+df_proc = df_proc.dropna(subset=["Tanggal"])
+
+# Encoding kolom kategorikal
 for col in df_proc.select_dtypes(include="object").columns:
     df_proc[col] = LabelEncoder().fit_transform(df_proc[col])
 
-# Cleaning
+# Cleaning akhir
 df_proc = df_proc.dropna().drop_duplicates()
 
-features = [
+X = df_proc[[
     "Terjual",
     "Harga",
-    "Modal Satuan",
-    "Pemasukan",
-    "Pengeluaran"
-]
-
-X = df_proc[features]
+    "Pemasukan"
+]]
 
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 dbscan = DBSCAN(
-    eps=0.5,
+    eps=0.4,
     min_samples=5
 )
 
 clusters = dbscan.fit_predict(X_scaled)
 df_proc["Cluster"] = clusters
 
-st.subheader("📊 Distribusi Cluster")
-
+st.subheader("📌 Distribusi Cluster")
 cluster_counts = df_proc["Cluster"].value_counts().sort_index()
 st.dataframe(cluster_counts.rename("Jumlah Data"))
 
-fig, ax = plt.subplots()
-cluster_counts.plot(kind="bar", ax=ax)
-ax.set_title("Jumlah Data per Cluster")
-ax.set_xlabel("Cluster")
-ax.set_ylabel("Jumlah Transaksi")
+st.subheader("📊 Rata-rata Setiap Cluster")
+cluster_mean = df_proc.groupby("Cluster")[[
+    "Terjual",
+    "Harga",
+    "Pemasukan"
+]].mean()
+st.dataframe(cluster_mean)
 
-st.pyplot(fig)
+st.subheader("🎯 Visualisasi Hasil Clustering")
 
-st.subheader("📋 Rata-rata Setiap Cluster")
-
-cluster_summary = df_proc.groupby("Cluster")[features].mean()
-st.dataframe(cluster_summary)
-
-st.subheader("🔍 Visualisasi Cluster (Scatter Plot)")
-
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(figsize=(8, 6))
 sns.scatterplot(
     data=df_proc,
     x="Harga",
@@ -102,14 +83,18 @@ sns.scatterplot(
     ax=ax
 )
 
-ax.set_title("Clustering berdasarkan Harga dan Pemasukan")
+ax.set_title("Scatter Plot Clustering DBSCAN")
+ax.set_xlabel("Harga")
+ax.set_ylabel("Pemasukan")
+
 st.pyplot(fig)
 
 st.markdown(
     """
 ### 📝 Keterangan:
-- Setiap warna menunjukkan **satu cluster**.
-- Clustering dibentuk berdasarkan **pola transaksi dan keuangan**.
-- **DBSCAN tidak memerlukan jumlah cluster di awal** dan tidak menggunakan K-Means.
+- **DBSCAN** mengelompokkan data berdasarkan kepadatan.
+- Tidak perlu menentukan jumlah cluster di awal.
+- Nilai `-1` (jika ada) menunjukkan **noise / outlier**.
+- Clustering dibentuk dari pola **Terjual, Harga, dan Pemasukan**.
 """
 )
